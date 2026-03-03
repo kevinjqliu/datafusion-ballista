@@ -34,7 +34,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Ballista Code Organization" href="code-organization.html" />
-    <link rel="prev" title="Extending Ballista Scheduler And Executors" href="../user-guide/extending-components.html" />
+    <link rel="prev" title="Extensions Example" href="../user-guide/extensions-example.html" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="docsearch:language" content="en">
     
@@ -180,6 +180,16 @@
  <li class="toctree-l1">
   <a class="reference internal" href="../user-guide/extending-components.html">
    Extending Ballista Scheduler And Executors
+  </a>
+ </li>
+ <li class="toctree-l1">
+  <a class="reference internal" href="../user-guide/spark-compatible-functions.html">
+   Spark-Compatible Functions
+  </a>
+ </li>
+ <li class="toctree-l1">
+  <a class="reference internal" href="../user-guide/extensions-example.html">
+   Extensions Example
   </a>
  </li>
 </ul>
@@ -430,8 +440,6 @@ between the executor(s) and the scheduler for fetching tasks and reporting task 
 plan or a SQL string. The scheduler then creates an execution graph, which contains a physical plan broken down into
 stages (pipelines) that can be scheduled independently. This process is explained in detail in the Distributed
 Query Scheduling section of this guide.</p>
-<p>It is possible to have multiple schedulers running with shared state in etcd, so that jobs can continue to run
-even if a scheduler process fails.</p>
 </section>
 <section id="executor">
 <h3>Executor<a class="headerlink" href="#executor" title="Link to this heading">¶</a></h3>
@@ -477,7 +485,7 @@ called pipeline breakers and these changes in partitioning define the boundaries
 </div>
 <p>The physical (non-distributed) plan for this query would look something like this:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Projection</span><span class="p">:</span> <span class="c1">#customer.id, #total_amount</span>
-  <span class="n">HashAggregate</span><span class="p">:</span> <span class="n">groupBy</span><span class="o">=</span><span class="p">[</span><span class="n">customer</span><span class="o">.</span><span class="n">id</span><span class="p">],</span> <span class="n">aggr</span><span class="o">=</span><span class="p">[</span><span class="n">MAX</span><span class="p">(</span><span class="n">max_fare</span><span class="p">)</span> <span class="n">AS</span> <span class="n">total_amount</span><span class="p">]</span>
+  <span class="n">HashAggregate</span><span class="p">:</span> <span class="n">groupBy</span><span class="o">=</span><span class="p">[</span><span class="n">customer</span><span class="o">.</span><span class="n">id</span><span class="p">],</span> <span class="n">aggr</span><span class="o">=</span><span class="p">[</span><span class="n">SUM</span><span class="p">(</span><span class="n">order</span><span class="o">.</span><span class="n">amount</span><span class="p">)</span> <span class="n">AS</span> <span class="n">total_amount</span><span class="p">]</span>
     <span class="n">Join</span><span class="p">:</span> <span class="n">condition</span><span class="o">=</span><span class="p">[</span><span class="n">customer</span><span class="o">.</span><span class="n">id</span> <span class="o">=</span> <span class="n">order</span><span class="o">.</span><span class="n">customer_id</span><span class="p">]</span>
       <span class="n">Scan</span><span class="p">:</span> <span class="n">customer</span>
       <span class="n">Scan</span><span class="p">:</span> <span class="n">order</span>
@@ -498,7 +506,7 @@ in the same query stage as the join because this first aggregate does not care h
 gives us our third query stage, which can now be scheduled for execution. The output of this query stage
 remains partitioned by customer id.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Query</span> <span class="n">Stage</span> <span class="c1">#3: repartition=[]</span>
-  <span class="n">HashAggregate</span><span class="p">:</span> <span class="n">groupBy</span><span class="o">=</span><span class="p">[</span><span class="n">customer</span><span class="o">.</span><span class="n">id</span><span class="p">],</span> <span class="n">aggr</span><span class="o">=</span><span class="p">[</span><span class="n">MAX</span><span class="p">(</span><span class="n">max_fare</span><span class="p">)</span> <span class="n">AS</span> <span class="n">total_amount</span><span class="p">]</span>
+  <span class="n">HashAggregate</span><span class="p">:</span> <span class="n">groupBy</span><span class="o">=</span><span class="p">[</span><span class="n">customer</span><span class="o">.</span><span class="n">id</span><span class="p">],</span> <span class="n">aggr</span><span class="o">=</span><span class="p">[</span><span class="n">SUM</span><span class="p">(</span><span class="n">order</span><span class="o">.</span><span class="n">amount</span><span class="p">)</span> <span class="n">AS</span> <span class="n">total_amount</span><span class="p">]</span>
     <span class="n">Join</span><span class="p">:</span> <span class="n">condition</span><span class="o">=</span><span class="p">[</span><span class="n">customer</span><span class="o">.</span><span class="n">id</span> <span class="o">=</span> <span class="n">order</span><span class="o">.</span><span class="n">customer_id</span><span class="p">]</span>
       <span class="n">Query</span> <span class="n">Stage</span> <span class="c1">#1</span>
       <span class="n">Query</span> <span class="n">Stage</span> <span class="c1">#2</span>
@@ -508,7 +516,7 @@ remains partitioned by customer id.</p>
 stage.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Query</span> <span class="n">Stage</span> <span class="c1">#4:</span>
   <span class="n">Projection</span><span class="p">:</span> <span class="c1">#customer.id, #total_amount</span>
-    <span class="n">HashAggregate</span><span class="p">:</span> <span class="n">groupBy</span><span class="o">=</span><span class="p">[</span><span class="n">customer</span><span class="o">.</span><span class="n">id</span><span class="p">],</span> <span class="n">aggr</span><span class="o">=</span><span class="p">[</span><span class="n">MAX</span><span class="p">(</span><span class="n">max_fare</span><span class="p">)</span> <span class="n">AS</span> <span class="n">total_amount</span><span class="p">]</span>
+    <span class="n">HashAggregate</span><span class="p">:</span> <span class="n">groupBy</span><span class="o">=</span><span class="p">[</span><span class="n">customer</span><span class="o">.</span><span class="n">id</span><span class="p">],</span> <span class="n">aggr</span><span class="o">=</span><span class="p">[</span><span class="n">SUM</span><span class="p">(</span><span class="n">order</span><span class="o">.</span><span class="n">amount</span><span class="p">)</span> <span class="n">AS</span> <span class="n">total_amount</span><span class="p">]</span>
       <span class="n">QueryStage</span> <span class="c1">#3</span>
 </pre></div>
 </div>
@@ -516,9 +524,9 @@ stage.</p>
 repartitioned or exchanged between pipelined operations.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Query</span> <span class="n">Stage</span> <span class="c1">#4:</span>
   <span class="n">Projection</span><span class="p">:</span> <span class="c1">#customer.id, #total_amount</span>
-    <span class="n">HashAggregate</span><span class="p">:</span> <span class="n">groupBy</span><span class="o">=</span><span class="p">[</span><span class="n">customer</span><span class="o">.</span><span class="n">id</span><span class="p">],</span> <span class="n">aggr</span><span class="o">=</span><span class="p">[</span><span class="n">MAX</span><span class="p">(</span><span class="n">max_fare</span><span class="p">)</span> <span class="n">AS</span> <span class="n">total_amount</span><span class="p">]</span>
+    <span class="n">HashAggregate</span><span class="p">:</span> <span class="n">groupBy</span><span class="o">=</span><span class="p">[</span><span class="n">customer</span><span class="o">.</span><span class="n">id</span><span class="p">],</span> <span class="n">aggr</span><span class="o">=</span><span class="p">[</span><span class="n">SUM</span><span class="p">(</span><span class="n">order</span><span class="o">.</span><span class="n">amount</span><span class="p">)</span> <span class="n">AS</span> <span class="n">total_amount</span><span class="p">]</span>
       <span class="n">Query</span> <span class="n">Stage</span> <span class="c1">#3: repartition=[]</span>
-        <span class="n">HashAggregate</span><span class="p">:</span> <span class="n">groupBy</span><span class="o">=</span><span class="p">[</span><span class="n">customer</span><span class="o">.</span><span class="n">id</span><span class="p">],</span> <span class="n">aggr</span><span class="o">=</span><span class="p">[</span><span class="n">MAX</span><span class="p">(</span><span class="n">max_fare</span><span class="p">)</span> <span class="n">AS</span> <span class="n">total_amount</span><span class="p">]</span>
+        <span class="n">HashAggregate</span><span class="p">:</span> <span class="n">groupBy</span><span class="o">=</span><span class="p">[</span><span class="n">customer</span><span class="o">.</span><span class="n">id</span><span class="p">],</span> <span class="n">aggr</span><span class="o">=</span><span class="p">[</span><span class="n">SUM</span><span class="p">(</span><span class="n">order</span><span class="o">.</span><span class="n">amount</span><span class="p">)</span> <span class="n">AS</span> <span class="n">total_amount</span><span class="p">]</span>
           <span class="n">Join</span><span class="p">:</span> <span class="n">condition</span><span class="o">=</span><span class="p">[</span><span class="n">customer</span><span class="o">.</span><span class="n">id</span> <span class="o">=</span> <span class="n">order</span><span class="o">.</span><span class="n">customer_id</span><span class="p">]</span>
             <span class="n">Query</span> <span class="n">Stage</span> <span class="c1">#1: repartition=[customer.id]</span>
               <span class="n">Scan</span><span class="p">:</span> <span class="n">customer</span>
@@ -546,11 +554,11 @@ and <a class="reference external" href="https://github.com/apache/datafusion-bal
               
               <!-- Previous / next buttons -->
 <div class='prev-next-area'>
-    <a class='left-prev' id="prev-link" href="../user-guide/extending-components.html" title="previous page">
+    <a class='left-prev' id="prev-link" href="../user-guide/extensions-example.html" title="previous page">
         <i class="fas fa-angle-left"></i>
         <div class="prev-next-info">
             <p class="prev-next-subtitle">previous</p>
-            <p class="prev-next-title">Extending Ballista Scheduler And Executors</p>
+            <p class="prev-next-title">Extensions Example</p>
         </div>
     </a>
     <a class='right-next' id="next-link" href="code-organization.html" title="next page">
